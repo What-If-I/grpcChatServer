@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "ChatServer";
+option java_outer_classname = "ChatProto";
+
+package chatServer;
+
+service Chat {
+    rpc Subscribe (User) returns (stream Reply) {}
+    rpc SendMessage (Message) returns (Reply) {}
+}
+
+message User {
+    string name = 1;
+}
+
+message Message {
+    string text = 1;
+    User user = 2;
+}
+
+message Reply {
+    string message = 1;
+}
