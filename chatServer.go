@@ -16,12 +16,26 @@ import (
 
 const defaultPort = ":50051"
 
-func getServerPort() string {
-	port := os.Getenv("SERVER_PORT")
-	if port == "" {
-		return defaultPort
+func main() {
+	port := getEnv("PORT", defaultPort)
+	lis, err := net.Listen("tcp", port)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
 	}
-	return port
+	server := grpc.NewServer()
+	pb.RegisterChatServer(server, &chat{})
+	reflection.Register(server)
+	if err := server.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+}
+
+func getEnv(envName string, defaults string) string {
+	val := os.Getenv(envName)
+	if val == "" {
+		return defaults
+	}
+	return val
 }
 
 type chat struct{}
@@ -33,9 +47,10 @@ func (s *chat) Subscribe(subscriber *pb.User, stream pb.Chat_SubscribeServer) er
 	notifyAllSubs(pb.Reply{fmt.Sprintf("%s joined the chat!", subscriber.Name)})
 
 	subscribers[stream] = subscriber
+	defer delete(subscribers, stream)
+	defer notifyAllSubs(pb.Reply{fmt.Sprintf("%s left the chat.", subscriber.Name)})
+
 	<-stream.Context().Done() // Waiting channel to be closed by client
-	delete(subscribers, stream)
-	notifyAllSubs(pb.Reply{fmt.Sprintf("%s left the chat.", subscriber.Name)})
 
 	log.Printf("Closing %s's channel.", subscriber.Name)
 	return nil
@@ -57,19 +72,5 @@ func notifyAllSubs(msg pb.Reply) {
 		if err != nil {
 			log.Printf("Failed send message to %s. Reason: %s", user.Name, err)
 		}
-	}
-}
-
-func main() {
-	port := getServerPort()
-	lis, err := net.Listen("tcp", port)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-	}
-	s := grpc.NewServer()
-	pb.RegisterChatServer(s, &chat{})
-	reflection.Register(s)
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
 	}
 }
